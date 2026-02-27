@@ -1,75 +1,179 @@
-<script>
-  const sceneEl = document.querySelector('a-scene');
-  const modelEl = document.getElementById('theModel');
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
+  <title>MindAR Start + Tap Respawn</title>
 
-  // spawn area (relative to image target). adjust if needed
-  const SPAWN_X = 0.6;
-  const SPAWN_Y = 0.35;
-  const Z = 0.05; // slightly in front of target so it's easier to tap
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  const raycaster = new THREE.Raycaster();
-  const ndc = new THREE.Vector2();
+  <style>
+    body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
+    canvas, a-scene { touch-action: none; }
 
-  // Prevent double-trigger from a single tap
-  let tapLock = false;
-  function lockTapBriefly() {
-    tapLock = true;
-    setTimeout(() => (tapLock = false), 250);
-  }
+    #loading {
+      position: fixed; inset: 0;
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; background:#000;
+      z-index: 30;
+      font-weight: 700;
+    }
 
-  function rand(min, max) { return Math.random() * (max - min) + min; }
+    #startOverlay {
+      position: fixed; inset: 0; z-index: 20;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.65);
+      padding: 18px;
+    }
+    #card {
+      width:min(420px, 92vw);
+      background:rgba(18,18,18,0.92);
+      color:#fff;
+      border:1px solid rgba(255,255,255,0.15);
+      border-radius:16px;
+      padding:16px;
+      box-shadow:0 18px 45px rgba(0,0,0,0.5);
+    }
+    #title { font-weight:800; font-size:20px; margin-bottom:8px; }
+    #desc { opacity:.92; line-height:1.4; margin-bottom:12px; }
+    #startBtn {
+      width:100%;
+      padding:12px 14px;
+      border:0;
+      border-radius:12px;
+      font-weight:800;
+      cursor:pointer;
+    }
+    #tip {
+      opacity:.7; font-size:12px; margin-top:10px;
+    }
+  </style>
+</head>
 
-  function respawnModel() {
-    // put it somewhere new + show it
-    const x = rand(-SPAWN_X, SPAWN_X);
-    const y = rand(-SPAWN_Y, SPAWN_Y);
-    modelEl.setAttribute('position', `${x} ${y} ${Z}`);
-    modelEl.setAttribute('rotation', `0 ${rand(0,360)} 0`);
-    modelEl.setAttribute('visible', true);
-  }
+<body>
+  <div id="loading">Loading AR…</div>
 
-  function hitTestModel(clientX, clientY) {
-    if (!sceneEl.canvas || !sceneEl.camera) return false;
+  <div id="startOverlay">
+    <div id="card">
+      <div id="title">AR Demo</div>
+      <div id="desc">
+        Point your camera at the target image.<br><br>
+        Press <b>Start</b> to show the model.<br>
+        Tap the model to make it disappear and respawn somewhere else.
+      </div>
+      <button id="startBtn">Start</button>
+      <div id="tip">Tip: keep the target image well-lit and steady.</div>
+    </div>
+  </div>
 
-    const rect = sceneEl.canvas.getBoundingClientRect();
-    ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    ndc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+  <a-scene
+    mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: true"
+    renderer="colorManagement: true; physicallyCorrectLights: true"
+  >
+    <a-assets>
+      <a-asset-item id="mymodel" src="model.glb"></a-asset-item>
+    </a-assets>
 
-    raycaster.setFromCamera(ndc, sceneEl.camera);
+    <a-camera id="cam" position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    const meshes = [];
-    modelEl.object3D.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
+    <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+      <a-entity id="theModel"
+        gltf-model="#mymodel"
+        position="0 0 0.05"
+        scale="0.2 0.2 0.2"
+        rotation="0 0 0"
+        visible="false"
+      ></a-entity>
+    </a-entity>
+  </a-scene>
 
-    const hits = raycaster.intersectObjects(meshes, true);
-    return hits.length > 0;
-  }
+  <script>
+    // Hide the loading screen once A-Frame is ready
+    const sceneEl = document.querySelector('a-scene');
+    sceneEl.addEventListener('loaded', () => {
+      const loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    });
 
-  function onTap(clientX, clientY) {
-    if (tapLock) return;
-    lockTapBriefly();
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
 
-    // only react if user tapped the model
-    if (!hitTestModel(clientX, clientY)) return;
+    const modelEl = document.getElementById('theModel');
 
-    // hide immediately
-    modelEl.setAttribute('visible', false);
+    // Spawn bounds (relative to image target)
+    const SPAWN_X = 0.6;
+    const SPAWN_Y = 0.35;
+    const Z = 0.05;
 
-    // respawn after a short delay (feels nicer)
-    setTimeout(respawnModel, 200);
-  }
+    let running = false;
 
-  // Spawn once at start
-  respawnModel();
+    function rand(min, max) { return Math.random() * (max - min) + min; }
 
-  // Touch
-  window.addEventListener('touchstart', (e) => {
-    if (!e.touches || !e.touches.length) return;
-    const t = e.touches[0];
-    onTap(t.clientX, t.clientY);
-  }, { passive: true });
+    function respawnModel() {
+      const x = rand(-SPAWN_X, SPAWN_X);
+      const y = rand(-SPAWN_Y, SPAWN_Y);
+      modelEl.setAttribute('position', `${x} ${y} ${Z}`);
+      modelEl.setAttribute('rotation', `0 ${rand(0,360)} 0`);
+      modelEl.setAttribute('visible', true);
+    }
 
-  // Mouse (desktop)
-  window.addEventListener('mousedown', (e) => {
-    onTap(e.clientX, e.clientY);
-  });
-</script>
+    // Reliable tap raycast (iPhone + Android)
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+
+    let tapLock = false;
+    function lockTapBriefly() {
+      tapLock = true;
+      setTimeout(() => (tapLock = false), 250);
+    }
+
+    function hitTestModel(clientX, clientY) {
+      if (!sceneEl.canvas || !sceneEl.camera) return false;
+
+      const rect = sceneEl.canvas.getBoundingClientRect();
+      ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      ndc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+
+      raycaster.setFromCamera(ndc, sceneEl.camera);
+
+      const meshes = [];
+      modelEl.object3D.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
+
+      const hits = raycaster.intersectObjects(meshes, true);
+      return hits.length > 0;
+    }
+
+    function onTap(clientX, clientY) {
+      if (!running) return;
+      if (tapLock) return;
+      lockTapBriefly();
+
+      if (!hitTestModel(clientX, clientY)) return;
+
+      // hide, then respawn elsewhere
+      modelEl.setAttribute('visible', false);
+      setTimeout(respawnModel, 200);
+    }
+
+    startBtn.addEventListener('click', () => {
+      running = true;
+      startOverlay.style.display = 'none';
+      respawnModel();
+    });
+
+    // Touch + mouse
+    window.addEventListener('touchstart', (e) => {
+      if (!e.touches || !e.touches.length) return;
+      const t = e.touches[0];
+      onTap(t.clientX, t.clientY);
+    }, { passive: true });
+
+    window.addEventListener('mousedown', (e) => {
+      onTap(e.clientX, e.clientY);
+    });
+  </script>
+</body>
+</html>
