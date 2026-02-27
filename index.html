@@ -2,233 +2,55 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-  <title>MindAR Tap Game</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MindAR Tap to Hide</title>
 
-  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <!-- MindAR A-Frame -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <!-- Better font -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
-
   <style>
-    body { margin:0; overflow:hidden; font-family: Inter, system-ui, -apple-system, Segoe UI, Arial; }
-
-    .overlay {
-      position: fixed; inset: 0; z-index: 20;
-      display: flex; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.68); color: #fff; padding: 18px;
-    }
-    .card {
-      width: min(560px, 92vw);
-      background: rgba(18,18,18,0.92);
-      border: 1px solid rgba(255,255,255,0.14);
-      border-radius: 18px; padding: 18px 18px 16px;
-      box-shadow: 0 18px 45px rgba(0,0,0,0.5);
-    }
-    h2 { margin: 0 0 10px 0; font-size: 22px; letter-spacing: -0.2px; }
-    p { margin: 0 0 10px 0; line-height: 1.45; opacity: 0.95; }
-    ul { margin: 10px 0 14px 18px; padding:0; line-height: 1.55; }
-    li { margin: 6px 0; }
-
-    .row { display:flex; gap: 12px; align-items:center; justify-content: space-between; flex-wrap: wrap; }
-    button {
-      padding: 10px 14px; border-radius: 12px; border: 0;
-      font-weight: 800; cursor: pointer;
-      font-family: inherit;
-    }
-    #startBtn, #restartBtn { background: #ffffff; color: #111; }
-    .sub { opacity: .72; font-size: 12px; margin-top: 6px; }
-
-    #hud {
-      position: fixed; top: 12px; left: 12px; right: 12px;
-      z-index: 10; display: flex; justify-content: space-between;
-      pointer-events: none;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.85);
-      font-weight: 800; color: #fff;
-    }
-    #hud > div { font-size: 18px; }
-
-    #hint {
-      position: fixed; bottom: 12px; left: 12px; right: 12px;
-      z-index: 10; color: #fff; opacity: 0.9;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.85);
-      font-size: 13px;
-      pointer-events: none;
-    }
+    body { margin:0; overflow:hidden; }
+    canvas, a-scene { touch-action: none; } /* helps iPhone/Android taps */
   </style>
 </head>
 
 <body>
-  <!-- HUD -->
-  <div id="hud">
-    <div>Score: <span id="score">0</span></div>
-    <div>Time: <span id="time">30</span>s</div>
-  </div>
-  <div id="hint">Point your camera at the target image. Tap items on the target.</div>
+<a-scene
+  mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: true"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+>
+  <a-assets>
+    <a-asset-item id="mymodel" src="model.glb"></a-asset-item>
+  </a-assets>
 
-  <!-- Start Screen -->
-  <div id="startOverlay" class="overlay">
-    <div class="card">
-      <h2>Save the Earth — Tap Challenge</h2>
+  <!-- Camera + cursor so tap works on mobile -->
+  <a-camera position="0 0 0" look-controls="enabled: false">
+    <a-entity cursor="rayOrigin: mouse; fuse: false"
+              raycaster="objects: .tappable"></a-entity>
+  </a-camera>
 
-      <p>How to play:</p>
-      <ul>
-        <li>Point your camera at the target image to start AR.</li>
-        <li>Tap <b>non-plastic</b> items to get <b>+1</b>.</li>
-        <li>If you tap a <b>plastic</b> item, you get <b>−1</b>.</li>
-        <li>You have <b>30 seconds</b>. There will always be <b>3 items</b> on screen.</li>
-      </ul>
+  <a-entity mindar-image-target="targetIndex: 0">
+    <!-- Your model -->
+    <a-entity id="theModel"
+              class="tappable"
+              gltf-model="#mymodel"
+              position="0 0 0"
+              scale="0.2 0.2 0.2"
+              rotation="0 0 0">
+    </a-entity>
+  </a-entity>
+</a-scene>
 
-      <div class="row">
-        <span style="opacity:.85;">Ready?</span>
-        <button id="startBtn">Start</button>
-      </div>
-      <div class="sub">Tip: keep the target image bright + steady.</div>
-    </div>
-  </div>
+<script>
+  const modelEl = document.getElementById('theModel');
 
-  <!-- End Screen -->
-  <div id="endOverlay" class="overlay" style="display:none;">
-    <div class="card">
-      <h2>Congrats 🎉</h2>
-      <p>Your score: <b><span id="finalScore">0</span></b></p>
-      <div class="row">
-        <span style="opacity:.85;">Play again?</span>
-        <button id="restartBtn">Play Again</button>
-      </div>
-    </div>
-  </div>
-
-  <a-scene
-    mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
-    vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: true"
-    renderer="colorManagement: true; physicallyCorrectLights: true"
-  >
-    <a-camera position="0 0 0" look-controls="enabled: false">
-      <!-- ✅ THIS is the missing piece: makes taps work on mobile -->
-      <a-entity
-        cursor="rayOrigin: mouse; fuse: false"
-        raycaster="objects: .clickable"
-      ></a-entity>
-    </a-camera>
-
-    <a-entity id="anchor" mindar-image-target="targetIndex: 0"></a-entity>
-  </a-scene>
-
-  <script>
-    // --- Config ---
-    const GAME_SECONDS = 30;
-    const MAX_ITEMS = 3;
-
-    // spawn range relative to target
-    const SPAWN_X = 0.6;
-    const SPAWN_Y = 0.35;
-    const Z = 0.0;
-
-    // --- State ---
-    let running = false;
-    let timeLeft = GAME_SECONDS;
-    let score = 0;
-    let timerId = null;
-
-    const anchor = document.getElementById('anchor');
-    const scoreEl = document.getElementById('score');
-    const timeEl = document.getElementById('time');
-    const finalScoreEl = document.getElementById('finalScore');
-    const startOverlay = document.getElementById('startOverlay');
-    const endOverlay = document.getElementById('endOverlay');
-    const startBtn = document.getElementById('startBtn');
-    const restartBtn = document.getElementById('restartBtn');
-
-    function rand(min, max) { return Math.random() * (max - min) + min; }
-    function updateHud() { scoreEl.textContent = score; timeEl.textContent = timeLeft; }
-
-    function clearItems() {
-      anchor.querySelectorAll('.spawned').forEach(e => e.remove());
-    }
-
-    function countItems() { return anchor.querySelectorAll('.spawned').length; }
-
-    function makeItem(isPlastic) {
-      const el = document.createElement('a-box');
-      el.classList.add('spawned', 'clickable'); // ✅ clickable class for raycaster
-      el.setAttribute('depth', '0.18');
-      el.setAttribute('height', '0.18');
-      el.setAttribute('width', '0.18');
-
-      // visual difference
-      el.setAttribute('color', isPlastic ? '#ff4d4d' : '#4dff88');
-
-      // position + rotation
-      const x = rand(-SPAWN_X, SPAWN_X);
-      const y = rand(-SPAWN_Y, SPAWN_Y);
-      el.setAttribute('position', `${x} ${y} ${Z}`);
-      el.setAttribute('rotation', `${rand(0, 360)} ${rand(0, 360)} ${rand(0, 360)}`);
-
-      el.dataset.plastic = isPlastic ? '1' : '0';
-
-      // ✅ Works once raycaster exists
-      el.addEventListener('click', () => {
-        if (!running) return;
-
-        const plastic = el.dataset.plastic === '1';
-        score += plastic ? -1 : 1;
-        updateHud();
-
-        el.remove();       // remove tapped item
-        ensureMaxItems();  // refill to 3
-      });
-
-      return el;
-    }
-
-    function ensureMaxItems() {
-      if (!running) return;
-      while (countItems() < MAX_ITEMS) {
-        const isPlastic = Math.random() < 0.5; // adjust if you want harder/easier
-        anchor.appendChild(makeItem(isPlastic));
-      }
-    }
-
-    function startGame() {
-      running = true;
-      timeLeft = GAME_SECONDS;
-      score = 0;
-      updateHud();
-
-      startOverlay.style.display = 'none';
-      endOverlay.style.display = 'none';
-
-      clearItems();
-      ensureMaxItems();
-
-      if (timerId) clearInterval(timerId);
-      timerId = setInterval(() => {
-        if (!running) return;
-        timeLeft -= 1;
-        updateHud();
-        if (timeLeft <= 0) endGame();
-      }, 1000);
-    }
-
-    function endGame() {
-      running = false;
-      if (timerId) { clearInterval(timerId); timerId = null; }
-      clearItems();
-      finalScoreEl.textContent = score;
-      endOverlay.style.display = 'flex';
-    }
-
-    startBtn.addEventListener('click', startGame);
-    restartBtn.addEventListener('click', startGame);
-
-    updateHud();
-  </script>
+  // Tap once = hide, tap again = show (toggle)
+  modelEl.addEventListener('click', () => {
+    const currentlyVisible = modelEl.getAttribute('visible');
+    modelEl.setAttribute('visible', !currentlyVisible);
+  });
+</script>
 </body>
 </html>
