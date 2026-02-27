@@ -2,19 +2,28 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MindAR Tap to Hide</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
+  <title>MindAR Tap to Hide (Reliable)</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     body { margin:0; overflow:hidden; }
-    canvas, a-scene { touch-action: none; } /* helps iPhone/Android taps */
+    canvas, a-scene { touch-action: none; } /* helps mobile taps */
+    #tip {
+      position: fixed; left: 12px; right: 12px; bottom: 12px;
+      z-index: 10; color: white; font-family: system-ui;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.85);
+      font-weight: 700; font-size: 14px;
+      pointer-events: none;
+    }
   </style>
 </head>
 
 <body>
+<div id="tip">Tap the model on your screen to hide/show.</div>
+
 <a-scene
   mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
   vr-mode-ui="enabled: false"
@@ -25,32 +34,61 @@
     <a-asset-item id="mymodel" src="model.glb"></a-asset-item>
   </a-assets>
 
-  <!-- Camera + cursor so tap works on mobile -->
-  <a-camera position="0 0 0" look-controls="enabled: false">
-    <a-entity cursor="rayOrigin: mouse; fuse: false"
-              raycaster="objects: .tappable"></a-entity>
-  </a-camera>
+  <a-camera id="cam" position="0 0 0" look-controls="enabled: false"></a-camera>
 
-  <a-entity mindar-image-target="targetIndex: 0">
-    <!-- Your model -->
+  <a-entity id="anchor" mindar-image-target="targetIndex: 0">
     <a-entity id="theModel"
-              class="tappable"
-              gltf-model="#mymodel"
-              position="0 0 0"
-              scale="0.2 0.2 0.2"
-              rotation="0 0 0">
-    </a-entity>
+      gltf-model="#mymodel"
+      position="0 0 0"
+      scale="0.2 0.2 0.2"
+      rotation="0 0 0"
+      visible="true"
+    ></a-entity>
   </a-entity>
 </a-scene>
 
 <script>
+  const sceneEl = document.querySelector('a-scene');
   const modelEl = document.getElementById('theModel');
 
-  // Tap once = hide, tap again = show (toggle)
-  modelEl.addEventListener('click', () => {
-    const currentlyVisible = modelEl.getAttribute('visible');
-    modelEl.setAttribute('visible', !currentlyVisible);
+  // Three.js raycaster (A-Frame uses Three.js internally)
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+
+  function hitTestModel(clientX, clientY) {
+    if (!sceneEl.canvas || !sceneEl.camera) return false;
+
+    const rect = sceneEl.canvas.getBoundingClientRect();
+    ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+
+    raycaster.setFromCamera(ndc, sceneEl.camera);
+
+    // Intersect against the model's meshes
+    const meshes = [];
+    modelEl.object3D.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
+
+    const hits = raycaster.intersectObjects(meshes, true);
+    return hits.length > 0;
+  }
+
+  function toggleModel() {
+    const v = modelEl.getAttribute('visible');
+    modelEl.setAttribute('visible', !v);
+  }
+
+  // Touch support
+  window.addEventListener('touchstart', (e) => {
+    if (!e.touches || !e.touches.length) return;
+    const t = e.touches[0];
+    if (hitTestModel(t.clientX, t.clientY)) toggleModel();
+  }, { passive: true });
+
+  // Mouse support (desktop)
+  window.addEventListener('mousedown', (e) => {
+    if (hitTestModel(e.clientX, e.clientY)) toggleModel();
   });
 </script>
+
 </body>
 </html>
