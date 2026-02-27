@@ -1,59 +1,32 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-  <title>MindAR Tap to Hide (Reliable)</title>
-
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
-  <style>
-    body { margin:0; overflow:hidden; }
-    canvas, a-scene { touch-action: none; } /* helps mobile taps */
-    #tip {
-      position: fixed; left: 12px; right: 12px; bottom: 12px;
-      z-index: 10; color: white; font-family: system-ui;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.85);
-      font-weight: 700; font-size: 14px;
-      pointer-events: none;
-    }
-  </style>
-</head>
-
-<body>
-<div id="tip">Tap the model on your screen to hide/show.</div>
-
-<a-scene
-  mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
-  vr-mode-ui="enabled: false"
-  device-orientation-permission-ui="enabled: true"
-  renderer="colorManagement: true; physicallyCorrectLights: true"
->
-  <a-assets>
-    <a-asset-item id="mymodel" src="model.glb"></a-asset-item>
-  </a-assets>
-
-  <a-camera id="cam" position="0 0 0" look-controls="enabled: false"></a-camera>
-
-  <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-    <a-entity id="theModel"
-      gltf-model="#mymodel"
-      position="0 0 0"
-      scale="0.2 0.2 0.2"
-      rotation="0 0 0"
-      visible="true"
-    ></a-entity>
-  </a-entity>
-</a-scene>
-
 <script>
   const sceneEl = document.querySelector('a-scene');
   const modelEl = document.getElementById('theModel');
 
-  // Three.js raycaster (A-Frame uses Three.js internally)
+  // spawn area (relative to image target). adjust if needed
+  const SPAWN_X = 0.6;
+  const SPAWN_Y = 0.35;
+  const Z = 0.05; // slightly in front of target so it's easier to tap
+
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
+
+  // Prevent double-trigger from a single tap
+  let tapLock = false;
+  function lockTapBriefly() {
+    tapLock = true;
+    setTimeout(() => (tapLock = false), 250);
+  }
+
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+
+  function respawnModel() {
+    // put it somewhere new + show it
+    const x = rand(-SPAWN_X, SPAWN_X);
+    const y = rand(-SPAWN_Y, SPAWN_Y);
+    modelEl.setAttribute('position', `${x} ${y} ${Z}`);
+    modelEl.setAttribute('rotation', `0 ${rand(0,360)} 0`);
+    modelEl.setAttribute('visible', true);
+  }
 
   function hitTestModel(clientX, clientY) {
     if (!sceneEl.canvas || !sceneEl.camera) return false;
@@ -64,7 +37,6 @@
 
     raycaster.setFromCamera(ndc, sceneEl.camera);
 
-    // Intersect against the model's meshes
     const meshes = [];
     modelEl.object3D.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
 
@@ -72,23 +44,32 @@
     return hits.length > 0;
   }
 
-  function toggleModel() {
-    const v = modelEl.getAttribute('visible');
-    modelEl.setAttribute('visible', !v);
+  function onTap(clientX, clientY) {
+    if (tapLock) return;
+    lockTapBriefly();
+
+    // only react if user tapped the model
+    if (!hitTestModel(clientX, clientY)) return;
+
+    // hide immediately
+    modelEl.setAttribute('visible', false);
+
+    // respawn after a short delay (feels nicer)
+    setTimeout(respawnModel, 200);
   }
 
-  // Touch support
+  // Spawn once at start
+  respawnModel();
+
+  // Touch
   window.addEventListener('touchstart', (e) => {
     if (!e.touches || !e.touches.length) return;
     const t = e.touches[0];
-    if (hitTestModel(t.clientX, t.clientY)) toggleModel();
+    onTap(t.clientX, t.clientY);
   }, { passive: true });
 
-  // Mouse support (desktop)
+  // Mouse (desktop)
   window.addEventListener('mousedown', (e) => {
-    if (hitTestModel(e.clientX, e.clientY)) toggleModel();
+    onTap(e.clientX, e.clientY);
   });
 </script>
-
-</body>
-</html>
