@@ -3,27 +3,97 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-  <title>MindAR 3 Models Spawn</title>
+  <title>MindAR 3-Spawn Tap Game</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
+  <!-- nicer font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
+
   <style>
-    body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
+    body { margin:0; overflow:hidden; font-family: Inter, system-ui, -apple-system, Segoe UI, Arial; }
     canvas, a-scene { touch-action: none; }
 
-    #hint {
-      position: fixed; left: 12px; right: 12px; bottom: 12px;
-      z-index: 10; color: white;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.85);
-      font-weight: 700; font-size: 14px;
-      pointer-events: none;
+    #hud{
+      position:fixed; top:12px; left:12px; right:12px;
+      display:flex; justify-content:space-between;
+      z-index:10; color:#fff; font-weight:800;
+      text-shadow:0 2px 10px rgba(0,0,0,0.85);
+      pointer-events:none;
+      font-size:18px;
     }
+
+    .overlay{
+      position:fixed; inset:0; z-index:20;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.65);
+      padding:18px;
+    }
+    .card{
+      width:min(560px, 92vw);
+      background:rgba(18,18,18,0.92);
+      border:1px solid rgba(255,255,255,0.14);
+      border-radius:18px;
+      padding:16px;
+      color:#fff;
+      box-shadow:0 18px 45px rgba(0,0,0,0.5);
+    }
+    h2{ margin:0 0 10px 0; font-size:22px; letter-spacing:-0.2px; }
+    p{ margin:0 0 10px 0; line-height:1.45; opacity:0.95; }
+    ul{ margin:10px 0 14px 18px; padding:0; line-height:1.55; }
+    li{ margin:6px 0; }
+    .row{ display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    button{
+      padding:12px 14px; border-radius:12px; border:0;
+      font-weight:800; cursor:pointer; font-family:inherit;
+      background:#fff; color:#111;
+    }
+    .small{ opacity:0.72; font-size:12px; }
   </style>
 </head>
 
 <body>
-  <div id="hint">Scan the target once. Tap a model to remove it—another one will spawn (always 3 total).</div>
+  <!-- HUD -->
+  <div id="hud">
+    <div>Score: <span id="score">0</span></div>
+    <div>Time: <span id="time">30</span>s</div>
+  </div>
+
+  <!-- Instruction Overlay (shown after first scan) -->
+  <div id="introOverlay" class="overlay" style="display:none;">
+    <div class="card">
+      <h2>Tap the Reusable Items</h2>
+      <p id="scanStatus" class="small">Scan the target image to begin…</p>
+      <ul>
+        <li>You have <b>30 seconds</b>.</li>
+        <li>Tap <b>reusable</b> items to get <b>+1</b>.</li>
+        <li>Tap <b>single-use plastic</b> items to get <b>−1</b>.</li>
+        <li>There will always be <b>3 items</b> on screen.</li>
+      </ul>
+      <div class="row">
+        <span class="small">Ready?</span>
+        <button id="startBtn">Start</button>
+      </div>
+      <div class="small" style="margin-top:10px;">
+        Tip: good lighting helps tracking.
+      </div>
+    </div>
+  </div>
+
+  <!-- End Overlay -->
+  <div id="endOverlay" class="overlay" style="display:none;">
+    <div class="card">
+      <h2>Congrats 🎉</h2>
+      <p>Your points awarded: <b><span id="finalScore">0</span></b></p>
+      <div class="row">
+        <span class="small">Play again?</span>
+        <button id="againBtn">Again</button>
+      </div>
+    </div>
+  </div>
 
   <a-scene
     mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
@@ -32,7 +102,6 @@
     renderer="colorManagement: true; physicallyCorrectLights: true"
   >
     <a-assets>
-      <!-- Preload ALL models -->
       <a-asset-item id="c1" src="correct_1.glb"></a-asset-item>
       <a-asset-item id="c2" src="correct_2.glb"></a-asset-item>
       <a-asset-item id="c3" src="correct_3.glb"></a-asset-item>
@@ -44,112 +113,194 @@
 
     <a-camera id="cam" position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <!-- Anchor on image target -->
+    <!-- Anchor -->
     <a-entity id="anchor" mindar-image-target="targetIndex: 0"></a-entity>
   </a-scene>
 
   <script>
-    // ---------- CONFIG ----------
+    // ---------------- CONFIG ----------------
+    const GAME_SECONDS = 30;
     const MAX_ON_SCREEN = 3;
 
-    // Spawn area relative to target (tune these)
+    // spawn area (relative to target); tweak if needed
     const SPAWN_X = 0.65;
     const SPAWN_Y = 0.38;
-    const Z = 0.05; // slightly in front of target plane
+    const Z = 0.05;
 
-    // Model scale (you can tweak per model later)
+    // scale for ALL models (if some models are inconsistent, we can make per-model later)
     const MODEL_SCALE = "0.18 0.18 0.18";
 
-    // Which models can spawn
-    const MODEL_IDS = ["#c1","#c2","#c3","#w1","#w2","#w3"];
+    const MODEL_POOL = [
+      { id: "#c1", type: "correct" },
+      { id: "#c2", type: "correct" },
+      { id: "#c3", type: "correct" },
+      { id: "#w1", type: "wrong"   },
+      { id: "#w2", type: "wrong"   },
+      { id: "#w3", type: "wrong"   },
+    ];
 
-    // ---------- STATE ----------
+    // ---------------- STATE ----------------
     const sceneEl = document.querySelector("a-scene");
     const anchorEl = document.getElementById("anchor");
 
-    let started = false; // becomes true after first target detection
-    let tapLock = false;
+    const introOverlay = document.getElementById("introOverlay");
+    const endOverlay = document.getElementById("endOverlay");
+    const startBtn = document.getElementById("startBtn");
+    const againBtn = document.getElementById("againBtn");
 
+    const scanStatus = document.getElementById("scanStatus");
+    const scoreEl = document.getElementById("score");
+    const timeEl = document.getElementById("time");
+    const finalScoreEl = document.getElementById("finalScore");
+
+    let scannedOnce = false;   // first time targetFound happens
+    let running = false;
+    let score = 0;
+    let timeLeft = GAME_SECONDS;
+    let timerId = null;
+
+    // manual raycast for reliable tapping
     const raycaster = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
+    let tapLock = false;
 
-    function rand(min, max) { return Math.random() * (max - min) + min; }
-
-    function lockTapBriefly() {
+    function rand(min, max){ return Math.random() * (max - min) + min; }
+    function lockTapBriefly(){
       tapLock = true;
-      setTimeout(() => (tapLock = false), 220);
+      setTimeout(() => tapLock = false, 220);
+    }
+    function updateHud(){
+      scoreEl.textContent = score;
+      timeEl.textContent = timeLeft;
     }
 
-    function randomModelId() {
-      return MODEL_IDS[Math.floor(Math.random() * MODEL_IDS.length)];
+    function clearModels(){
+      anchorEl.querySelectorAll(".spawned").forEach(el => el.remove());
     }
 
-    function spawnOne() {
-      const ent = document.createElement("a-entity");
-      ent.classList.add("spawned"); // marker class
+    function pickRandomModel(){
+      return MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
+    }
 
-      ent.setAttribute("gltf-model", randomModelId());
-      ent.setAttribute("scale", MODEL_SCALE);
+    function spawnOne(){
+      const choice = pickRandomModel();
+
+      const el = document.createElement("a-entity");
+      el.classList.add("spawned");
+      el.dataset.type = choice.type; // correct/wrong
+      el.setAttribute("gltf-model", choice.id);
+      el.setAttribute("scale", MODEL_SCALE);
 
       const x = rand(-SPAWN_X, SPAWN_X);
       const y = rand(-SPAWN_Y, SPAWN_Y);
-      ent.setAttribute("position", `${x} ${y} ${Z}`);
-      ent.setAttribute("rotation", `0 ${rand(0,360)} 0`);
+      el.setAttribute("position", `${x} ${y} ${Z}`);
+      el.setAttribute("rotation", `0 ${rand(0,360)} 0`);
 
-      // Optional: tag if it's correct/wrong (for points later)
-      const isWrong = ent.getAttribute("gltf-model").startsWith("#w");
-      ent.dataset.type = isWrong ? "wrong" : "correct";
-
-      anchorEl.appendChild(ent);
+      anchorEl.appendChild(el);
     }
 
-    function countSpawned() {
+    function countSpawned(){
       return anchorEl.querySelectorAll(".spawned").length;
     }
 
-    function ensureThree() {
-      if (!started) return;
+    function ensureThree(){
       while (countSpawned() < MAX_ON_SCREEN) spawnOne();
     }
 
-    // ----- (1) Start after first target found -----
-    // MindAR emits events on the entity with mindar-image-target
+    // ---------- SCAN FLOW ----------
     anchorEl.addEventListener("targetFound", () => {
-      if (started) return;
-      started = true;
-      ensureThree();
+      if (!scannedOnce){
+        scannedOnce = true;
+        introOverlay.style.display = "flex";   // show instructions after first scan
+        scanStatus.textContent = "Target detected ✅ Press Start.";
+      } else {
+        // optional: update status if target comes back
+        if (!running) scanStatus.textContent = "Target detected ✅ Press Start.";
+      }
     });
 
-    // If tracking lost, we do nothing. When found again, ensureThree() will refill.
     anchorEl.addEventListener("targetLost", () => {
-      // optional: keep models as-is; they stay under anchor anyway
-      // started remains true
+      // We DO NOT remove models; they "remain there".
+      // But tracking may freeze/drift while target isn't visible.
+      if (!running && scannedOnce){
+        scanStatus.textContent = "Target lost — bring it back into view to stabilize.";
+      }
     });
 
-    // ----- (2) Reliable tap detection (manual raycast) -----
-    function getAllMeshesUnderAnchor() {
+    // ---------- GAME CONTROL ----------
+    function startGame(){
+      running = true;
+      endOverlay.style.display = "none";
+      introOverlay.style.display = "none";
+
+      score = 0;
+      timeLeft = GAME_SECONDS;
+      updateHud();
+
+      clearModels();
+      ensureThree();
+
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(() => {
+        if (!running) return;
+        timeLeft -= 1;
+        updateHud();
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    }
+
+    function endGame(){
+      running = false;
+      if (timerId){ clearInterval(timerId); timerId = null; }
+
+      clearModels();
+      finalScoreEl.textContent = score;
+      endOverlay.style.display = "flex";
+    }
+
+    startBtn.addEventListener("click", () => {
+      if (!scannedOnce){
+        // just in case they press too early
+        scanStatus.textContent = "Scan the target image first 🙂";
+        introOverlay.style.display = "flex";
+        return;
+      }
+      startGame();
+    });
+
+    againBtn.addEventListener("click", () => {
+      // reset to instruction state
+      endOverlay.style.display = "none";
+      introOverlay.style.display = "flex";
+      scanStatus.textContent = scannedOnce
+        ? "Target detected ✅ Press Start."
+        : "Scan the target image to begin…";
+      score = 0;
+      timeLeft = GAME_SECONDS;
+      updateHud();
+    });
+
+    // ---------- TAP / HIT TEST ----------
+    function meshesUnderAnchor(){
       const meshes = [];
-      anchorEl.object3D.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
+      anchorEl.object3D.traverse(o => { if (o.isMesh) meshes.push(o); });
       return meshes;
     }
 
-    function findSpawnedEntityFromHitObject(obj3d) {
-      // Walk up until we find an A-Frame entity (.el)
+    function findSpawnedEntityFromHit(obj3d){
       let o = obj3d;
       while (o && !o.el) o = o.parent;
       if (!o || !o.el) return null;
 
-      // We want the top-level spawned entity, not an inner mesh
       let el = o.el;
-      while (el && el !== anchorEl && !el.classList.contains("spawned")) {
+      while (el && el !== anchorEl && !el.classList.contains("spawned")){
         el = el.parentElement;
       }
-      if (el && el.classList && el.classList.contains("spawned")) return el;
-      return null;
+      return (el && el.classList && el.classList.contains("spawned")) ? el : null;
     }
 
-    function onTap(clientX, clientY) {
-      if (!started) return;
+    function tapAt(clientX, clientY){
+      if (!running) return;
       if (tapLock) return;
       lockTapBriefly();
 
@@ -161,29 +312,34 @@
 
       raycaster.setFromCamera(ndc, sceneEl.camera);
 
-      const meshes = getAllMeshesUnderAnchor();
-      const hits = raycaster.intersectObjects(meshes, true);
+      const hits = raycaster.intersectObjects(meshesUnderAnchor(), true);
       if (!hits.length) return;
 
-      const hitEl = findSpawnedEntityFromHitObject(hits[0].object);
+      const hitEl = findSpawnedEntityFromHit(hits[0].object);
       if (!hitEl) return;
 
-      // Remove clicked model
-      hitEl.remove();
+      // scoring
+      const t = hitEl.dataset.type; // "correct" or "wrong"
+      score += (t === "correct") ? 1 : -1;
+      updateHud();
 
-      // Spawn back to keep 3 total
+      // remove + respawn to keep 3
+      hitEl.remove();
       ensureThree();
     }
 
     window.addEventListener("touchstart", (e) => {
       if (!e.touches || !e.touches.length) return;
       const t = e.touches[0];
-      onTap(t.clientX, t.clientY);
-    }, { passive: true });
+      tapAt(t.clientX, t.clientY);
+    }, { passive:true });
 
     window.addEventListener("mousedown", (e) => {
-      onTap(e.clientX, e.clientY);
+      tapAt(e.clientX, e.clientY);
     });
+
+    // init HUD
+    updateHud();
   </script>
 </body>
 </html>
