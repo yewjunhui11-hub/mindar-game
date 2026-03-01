@@ -65,20 +65,20 @@
   <!-- Instruction Overlay (shown after first scan) -->
   <div id="introOverlay" class="overlay" style="display:none;">
     <div class="card">
-      <h2>Tap the Reusable Items</h2>
+      <h2>Stop Single-Use Plastic!!</h2>
       <p id="scanStatus" class="small">Scan the target image to begin…</p>
       <ul>
         <li>You have <b>30 seconds</b>.</li>
         <li>Tap <b>reusable</b> items to get <b>+1</b>.</li>
-        <li>Tap <b>single-use plastic</b> items to get <b>−1</b>.</li>
-        <li>There will always be <b>3 items</b> on screen.</li>
+        <li>Careful not to tap on <b>single-use plastic</b> items or, <b>−1</b>.</li>
+        <li>Good Luck!</li>
       </ul>
       <div class="row">
         <span class="small">Ready?</span>
         <button id="startBtn">Start</button>
       </div>
       <div class="small" style="margin-top:10px;">
-        Tip: good lighting helps tracking.
+        Tip: coming closer helps tracking.
       </div>
     </div>
   </div>
@@ -128,7 +128,7 @@
     const Z = 0.05;
 
     // scale for ALL models (if some models are inconsistent, we can make per-model later)
-    const MODEL_SCALE = "0.18 0.18 0.18";
+    const MODEL_SCALE = "0.35 0.35 0.35";
 
     const MODEL_POOL = [
       { id: "#c1", type: "correct" },
