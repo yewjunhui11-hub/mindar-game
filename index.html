@@ -122,23 +122,27 @@
     const GAME_SECONDS = 30;
     const MAX_ON_SCREEN = 4;
 
-    // spawn area (relative to target); tweak if needed
+    // spawn area (relative to target)
     const SPAWN_X = 0.65;
     const SPAWN_Y = 0.38;
     const Z = 0.05;
 
-    // Minimum distance between spawned models (increase if still overlapping)
+    // spacing between models
     const MIN_DISTANCE = 0.25;
 
-    // Per-model scale (TUNE THESE so all look similar size)
-    // Start with same values, then adjust per model.
+    // spawn timing
+    const SPAWN_INTERVAL_MS = 500;   // one-by-one spawn
+    const MODEL_LIFETIME_MS = 2000;  // disappear after 2s if not tapped
+    const QUICK_RESPAWN_MS = 80;     // when tapped, refill quickly (still "one-by-one")
+
+    // Per-model scale (your values)
     const SCALE_BY_ID = {
-      "#c1": "0.95 0.95 0.95", //Metal bottle model
-      "#c2": "0.04 0.04 0.04", //Container model 
-      "#c3": "1.25 1.25 1.25",
-      "#w1": "1.00 1.00 1.00", //Plastic fork
-      "#w2": "1.50 1.50 1.50",
-      "#w3": "1.50 1.50 1.50",
+      "#c1": "0.95 0.95 0.95", // Metal bottle model
+      "#c2": "0.04 0.04 0.04", // Container model
+      "#c3": "10.25 10.25 10.25",
+      "#w1": "1.80 1.80 1.80", // Plastic cup 
+      "#w2": "1.50 1.50 1.50", // Plastic fork
+      "#w3": "1.80 1.80 1.80", // Plastic straw
     };
 
     const MODEL_POOL = [
@@ -164,7 +168,7 @@
     const timeEl = document.getElementById("time");
     const finalScoreEl = document.getElementById("finalScore");
 
-    let scannedOnce = false;   // first time targetFound happens
+    let scannedOnce = false;
     let running = false;
     let score = 0;
     let timeLeft = GAME_SECONDS;
@@ -175,21 +179,38 @@
     const ndc = new THREE.Vector2();
     let tapLock = false;
 
+    // Spawn scheduling state
+    let pendingSpawns = 0;
+    let pendingCorrect = 0;
+    const lifetimeTimers = new WeakMap(); // entity -> timerId
+
     function rand(min, max){ return Math.random() * (max - min) + min; }
+
     function lockTapBriefly(){
       tapLock = true;
       setTimeout(() => tapLock = false, 220);
     }
+
     function updateHud(){
       scoreEl.textContent = score;
       timeEl.textContent = timeLeft;
     }
 
-    function clearModels(){
-      anchorEl.querySelectorAll(".spawned").forEach(el => el.remove());
+    function clearAllScheduled(){
+      pendingSpawns = 0;
+      pendingCorrect = 0;
     }
 
-    // ---------- MODEL PICKERS ----------
+    function clearModels(){
+      anchorEl.querySelectorAll(".spawned").forEach(el => {
+        const tid = lifetimeTimers.get(el);
+        if (tid) clearTimeout(tid);
+        el.remove();
+      });
+      clearAllScheduled();
+    }
+
+    // ---------- PICKERS ----------
     function pickRandomFrom(list){
       return list[Math.floor(Math.random() * list.length)];
     }
@@ -200,7 +221,7 @@
       return pickRandomFrom(MODEL_POOL);
     }
 
-    // ---------- SPACING HELPERS ----------
+    // ---------- SPACING ----------
     function getSpawnedPositions(){
       return Array.from(anchorEl.querySelectorAll(".spawned")).map(el => {
         const p = el.getAttribute("position");
@@ -221,11 +242,9 @@
       for (let attempt = 0; attempt < 25; attempt++){
         const candidate = { x: rand(-SPAWN_X, SPAWN_X), y: rand(-SPAWN_Y, SPAWN_Y) };
         best = candidate;
-
         const ok = existing.every(p => distance(candidate, p) >= MIN_DISTANCE);
         if (ok) return candidate;
       }
-      // fallback if space is tight
       return best;
     }
 
@@ -238,49 +257,76 @@
         .filter(el => el.dataset.type === "correct").length;
     }
 
-    // ---------- SPAWN ----------
-    function spawnOne(forceType = null){
-      const choice =
-        forceType === "correct" ? pickRandomCorrect()
-        : pickRandomAny();
+    // ---------- SPAWN (creates entity + lifetime auto-remove) ----------
+    function spawnOneNow(forceType = null){
+      if (!running) return;
+
+      const choice = (forceType === "correct") ? pickRandomCorrect() : pickRandomAny();
 
       const el = document.createElement("a-entity");
       el.classList.add("spawned");
-      el.dataset.type = choice.type; // correct/wrong
+      el.dataset.type = choice.type;
       el.setAttribute("gltf-model", choice.id);
+      el.setAttribute("scale", SCALE_BY_ID[choice.id] || "1 1 1");
 
-      // per-model scale
-      el.setAttribute("scale", SCALE_BY_ID[choice.id] || "0.25 0.25 0.25");
-
-      // non-overlapping position
       const pos = findNonOverlappingPosition();
       el.setAttribute("position", `${pos.x} ${pos.y} ${Z}`);
       el.setAttribute("rotation", `0 ${rand(0,360)} 0`);
 
       anchorEl.appendChild(el);
+
+      // Auto-remove if not tapped within 2 seconds
+      const tid = setTimeout(() => {
+        if (!running) return;
+        if (!el.isConnected) return;
+
+        removeEntity(el);
+        // Refill (one-by-one)
+        scheduleFill(SPAWN_INTERVAL_MS);
+      }, MODEL_LIFETIME_MS);
+
+      lifetimeTimers.set(el, tid);
     }
 
-    // Always keep MAX_ON_SCREEN, with at least 2 correct
-    function ensureMax(){
-      while (countSpawned() < MAX_ON_SCREEN) {
-        const remainingSlots = MAX_ON_SCREEN - countSpawned();
-        const correctNow = countCorrectOnScreen();
-        const needCorrect = Math.max(0, 2 - correctNow);
+    function removeEntity(el){
+      const tid = lifetimeTimers.get(el);
+      if (tid) clearTimeout(tid);
+      lifetimeTimers.delete(el);
+      if (el.isConnected) el.remove();
+    }
 
-        // If we are running out of slots and still need correct models, force correct.
-        if (needCorrect > 0 && remainingSlots <= needCorrect) {
-          spawnOne("correct");
-        } else {
-          spawnOne(null);
-        }
-      }
+    // ---------- ONE-BY-ONE FILL SCHEDULER ----------
+    function scheduleSpawn(forceType, delayMs){
+      pendingSpawns += 1;
+      if (forceType === "correct") pendingCorrect += 1;
 
-      // Extra safety: if still <2 correct (rare), replace wrong with correct
-      while (countCorrectOnScreen() < 2) {
-        const wrong = anchorEl.querySelector('.spawned[data-type="wrong"]');
-        if (!wrong) break;
-        wrong.remove();
-        spawnOne("correct");
+      setTimeout(() => {
+        // this spawn is happening now
+        pendingSpawns -= 1;
+        if (forceType === "correct") pendingCorrect -= 1;
+
+        spawnOneNow(forceType);
+      }, delayMs);
+    }
+
+    // Fill up to MAX_ON_SCREEN, spawning one-by-one. Guarantee >=2 correct.
+    function scheduleFill(baseDelay = 0){
+      if (!running) return;
+
+      const currentTotal = countSpawned();
+      const deficit = MAX_ON_SCREEN - (currentTotal + pendingSpawns);
+      if (deficit <= 0) return;
+
+      // Project counts including already scheduled spawns
+      let projectedCorrect = countCorrectOnScreen() + pendingCorrect;
+
+      for (let i = 0; i < deficit; i++){
+        // Guarantee at least 2 correct: force correct until we reach 2.
+        const forceType = (projectedCorrect < 2) ? "correct" : null;
+        if (forceType === "correct") projectedCorrect += 1;
+
+        const delay = baseDelay + i * SPAWN_INTERVAL_MS;
+        scheduleSpawn(forceType, delay);
       }
     }
 
@@ -288,7 +334,7 @@
     anchorEl.addEventListener("targetFound", () => {
       if (!scannedOnce){
         scannedOnce = true;
-        introOverlay.style.display = "flex";   // show instructions after first scan
+        introOverlay.style.display = "flex";
         scanStatus.textContent = "Target detected ✅ Press Start.";
       } else {
         if (!running) scanStatus.textContent = "Target detected ✅ Press Start.";
@@ -312,7 +358,8 @@
       updateHud();
 
       clearModels();
-      ensureMax();
+      // spawn 4 one-by-one at start
+      scheduleFill(0);
 
       if (timerId) clearInterval(timerId);
       timerId = setInterval(() => {
@@ -391,13 +438,15 @@
       if (!hitEl) return;
 
       // scoring
-      const t = hitEl.dataset.type; // "correct" or "wrong"
+      const t = hitEl.dataset.type; // correct / wrong
       score += (t === "correct") ? 1 : -1;
       updateHud();
 
-      // remove + respawn to keep 4 (and >=2 correct)
-      hitEl.remove();
-      ensureMax();
+      // remove clicked model
+      removeEntity(hitEl);
+
+      // refill quickly (but still one-by-one style)
+      scheduleFill(QUICK_RESPAWN_MS);
     }
 
     window.addEventListener("touchstart", (e) => {
