@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-  <title>MindAR 3-Spawn Tap Game</title>
+  <title>Reduce Single-Use Plastic AR Game</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -120,15 +120,26 @@
   <script>
     // ---------------- CONFIG ----------------
     const GAME_SECONDS = 30;
-    const MAX_ON_SCREEN = 3;
+    const MAX_ON_SCREEN = 4;
 
     // spawn area (relative to target); tweak if needed
     const SPAWN_X = 0.65;
     const SPAWN_Y = 0.38;
     const Z = 0.05;
 
-    // scale for ALL models (if some models are inconsistent, we can make per-model later)
-    const MODEL_SCALE = "0.35 0.35 0.35";
+    // Minimum distance between spawned models (increase if still overlapping)
+    const MIN_DISTANCE = 0.25;
+
+    // Per-model scale (TUNE THESE so all look similar size)
+    // Start with same values, then adjust per model.
+    const SCALE_BY_ID = {
+      "#c1": "0.25 0.25 0.25",
+      "#c2": "0.25 0.25 0.25",
+      "#c3": "0.25 0.25 0.25",
+      "#w1": "0.25 0.25 0.25",
+      "#w2": "0.25 0.25 0.25",
+      "#w3": "0.25 0.25 0.25",
+    };
 
     const MODEL_POOL = [
       { id: "#c1", type: "correct" },
@@ -178,33 +189,99 @@
       anchorEl.querySelectorAll(".spawned").forEach(el => el.remove());
     }
 
-    function pickRandomModel(){
-      return MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
+    // ---------- MODEL PICKERS ----------
+    function pickRandomFrom(list){
+      return list[Math.floor(Math.random() * list.length)];
+    }
+    function pickRandomCorrect(){
+      return pickRandomFrom(MODEL_POOL.filter(m => m.type === "correct"));
+    }
+    function pickRandomAny(){
+      return pickRandomFrom(MODEL_POOL);
     }
 
-    function spawnOne(){
-      const choice = pickRandomModel();
+    // ---------- SPACING HELPERS ----------
+    function getSpawnedPositions(){
+      return Array.from(anchorEl.querySelectorAll(".spawned")).map(el => {
+        const p = el.getAttribute("position");
+        return { x: parseFloat(p.x), y: parseFloat(p.y) };
+      });
+    }
 
-      const el = document.createElement("a-entity");
-      el.classList.add("spawned");
-      el.dataset.type = choice.type; // correct/wrong
-      el.setAttribute("gltf-model", choice.id);
-      el.setAttribute("scale", MODEL_SCALE);
+    function distance(a, b){
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
 
-      const x = rand(-SPAWN_X, SPAWN_X);
-      const y = rand(-SPAWN_Y, SPAWN_Y);
-      el.setAttribute("position", `${x} ${y} ${Z}`);
-      el.setAttribute("rotation", `0 ${rand(0,360)} 0`);
+    function findNonOverlappingPosition(){
+      const existing = getSpawnedPositions();
+      let best = { x: 0, y: 0 };
 
-      anchorEl.appendChild(el);
+      for (let attempt = 0; attempt < 25; attempt++){
+        const candidate = { x: rand(-SPAWN_X, SPAWN_X), y: rand(-SPAWN_Y, SPAWN_Y) };
+        best = candidate;
+
+        const ok = existing.every(p => distance(candidate, p) >= MIN_DISTANCE);
+        if (ok) return candidate;
+      }
+      // fallback if space is tight
+      return best;
     }
 
     function countSpawned(){
       return anchorEl.querySelectorAll(".spawned").length;
     }
 
-    function ensureThree(){
-      while (countSpawned() < MAX_ON_SCREEN) spawnOne();
+    function countCorrectOnScreen(){
+      return Array.from(anchorEl.querySelectorAll(".spawned"))
+        .filter(el => el.dataset.type === "correct").length;
+    }
+
+    // ---------- SPAWN ----------
+    function spawnOne(forceType = null){
+      const choice =
+        forceType === "correct" ? pickRandomCorrect()
+        : pickRandomAny();
+
+      const el = document.createElement("a-entity");
+      el.classList.add("spawned");
+      el.dataset.type = choice.type; // correct/wrong
+      el.setAttribute("gltf-model", choice.id);
+
+      // per-model scale
+      el.setAttribute("scale", SCALE_BY_ID[choice.id] || "0.25 0.25 0.25");
+
+      // non-overlapping position
+      const pos = findNonOverlappingPosition();
+      el.setAttribute("position", `${pos.x} ${pos.y} ${Z}`);
+      el.setAttribute("rotation", `0 ${rand(0,360)} 0`);
+
+      anchorEl.appendChild(el);
+    }
+
+    // Always keep MAX_ON_SCREEN, with at least 2 correct
+    function ensureMax(){
+      while (countSpawned() < MAX_ON_SCREEN) {
+        const remainingSlots = MAX_ON_SCREEN - countSpawned();
+        const correctNow = countCorrectOnScreen();
+        const needCorrect = Math.max(0, 2 - correctNow);
+
+        // If we are running out of slots and still need correct models, force correct.
+        if (needCorrect > 0 && remainingSlots <= needCorrect) {
+          spawnOne("correct");
+        } else {
+          spawnOne(null);
+        }
+      }
+
+      // Extra safety: if still <2 correct (rare), replace wrong with correct
+      while (countCorrectOnScreen() < 2) {
+        const wrong = anchorEl.querySelector('.spawned[data-type="wrong"]');
+        if (!wrong) break;
+        wrong.remove();
+        spawnOne("correct");
+      }
     }
 
     // ---------- SCAN FLOW ----------
@@ -214,14 +291,11 @@
         introOverlay.style.display = "flex";   // show instructions after first scan
         scanStatus.textContent = "Target detected ✅ Press Start.";
       } else {
-        // optional: update status if target comes back
         if (!running) scanStatus.textContent = "Target detected ✅ Press Start.";
       }
     });
 
     anchorEl.addEventListener("targetLost", () => {
-      // We DO NOT remove models; they "remain there".
-      // But tracking may freeze/drift while target isn't visible.
       if (!running && scannedOnce){
         scanStatus.textContent = "Target lost — bring it back into view to stabilize.";
       }
@@ -238,7 +312,7 @@
       updateHud();
 
       clearModels();
-      ensureThree();
+      ensureMax();
 
       if (timerId) clearInterval(timerId);
       timerId = setInterval(() => {
@@ -260,7 +334,6 @@
 
     startBtn.addEventListener("click", () => {
       if (!scannedOnce){
-        // just in case they press too early
         scanStatus.textContent = "Scan the target image first 🙂";
         introOverlay.style.display = "flex";
         return;
@@ -269,7 +342,6 @@
     });
 
     againBtn.addEventListener("click", () => {
-      // reset to instruction state
       endOverlay.style.display = "none";
       introOverlay.style.display = "flex";
       scanStatus.textContent = scannedOnce
@@ -323,9 +395,9 @@
       score += (t === "correct") ? 1 : -1;
       updateHud();
 
-      // remove + respawn to keep 3
+      // remove + respawn to keep 4 (and >=2 correct)
       hitEl.remove();
-      ensureThree();
+      ensureMax();
     }
 
     window.addEventListener("touchstart", (e) => {
