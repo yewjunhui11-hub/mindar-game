@@ -5,17 +5,28 @@
   <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
   <title>Information AR</title>
 
+  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <!-- MindAR (Image Tracking) -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
+
     #hint{
-      position:fixed; inset:0; z-index:10;
-      display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.55); color:#fff; text-align:center;
+      position:fixed;
+      inset:0;
+      z-index:10;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,.55);
+      color:#fff;
+      text-align:center;
       padding:18px;
     }
+
     #hint .card{
       width:min(520px, 92vw);
       background:rgba(18,18,18,0.92);
@@ -23,6 +34,7 @@
       border-radius:16px;
       padding:16px;
     }
+
     h2{ margin:0 0 8px 0; font-size:20px; }
     p{ margin:0; opacity:.9; line-height:1.45; }
     .small{ margin-top:10px; opacity:.7; font-size:12px; }
@@ -30,6 +42,8 @@
 </head>
 
 <body>
+
+  <!-- Scan instruction overlay -->
   <div id="hint">
     <div class="card">
       <h2>Scan the target image</h2>
@@ -39,29 +53,41 @@
   </div>
 
   <a-scene
-    mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
+    mindar-image="imageTargetSrc: targets.mind; autoStart: true; uiScanning: true; uiLoading: true;"
     vr-mode-ui="enabled:false"
     device-orientation-permission-ui="enabled:true"
-    renderer="colorManagement: true; physicallyCorrectLights: true"
+    renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true"
+    embedded
   >
     <a-assets>
       <!-- must match file name exactly -->
       <a-asset-item id="plasticModel" src="plastic_model.glb"></a-asset-item>
     </a-assets>
 
+    <!-- Camera -->
     <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-    <!-- Model is attached to targetIndex 0 -->
-    <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-      <a-entity
-        id="model"
-        gltf-model="#plasticModel"
-        position="0 0 0.05"
-        rotation="0 0 0"
-        scale="0.12 0.12 0.12"
-        visible="false">
+    <!-- Better lighting -->
+    <a-entity light="type: ambient; intensity: 1.2"></a-entity>
+    <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+
+    <!-- Anchor on image target 0 -->
+    <a-entity id="anchor" mindar-image-target="targetIndex: 0" smoothing="true">
+
+      <!-- Wrapper to adjust orientation (edit this rotation if needed) -->
+      <a-entity id="modelRoot" rotation="0 180 0">
+        <a-entity
+          id="model"
+          gltf-model="#plasticModel"
+          position="0 0 0.05"
+          rotation="0 0 0"
+          scale="0.12 0.12 0.12"
+          visible="false">
+        </a-entity>
       </a-entity>
+
     </a-entity>
+
   </a-scene>
 
   <script>
@@ -69,15 +95,34 @@
     const anchor = document.getElementById("anchor");
     const model = document.getElementById("model");
 
+    let detectedOnce = false;
+    let lostTimer = null;
+
     anchor.addEventListener("targetFound", () => {
+      detectedOnce = true;
       model.setAttribute("visible", true);
       hint.style.display = "none";
+
+      // cancel any pending "lost" action
+      if (lostTimer) {
+        clearTimeout(lostTimer);
+        lostTimer = null;
+      }
     });
 
     anchor.addEventListener("targetLost", () => {
-      model.setAttribute("visible", false);
-      hint.style.display = "flex";
+      // Delay the "lost" reaction to reduce flicker
+      if (lostTimer) clearTimeout(lostTimer);
+
+      lostTimer = setTimeout(() => {
+        // If you want it to NEVER disappear, keep this line commented:
+        // model.setAttribute("visible", false);
+
+        // If it was never detected before, show the hint again
+        if (!detectedOnce) hint.style.display = "flex";
+      }, 700); // tweak between 400–1000ms
     });
   </script>
+
 </body>
 </html>
