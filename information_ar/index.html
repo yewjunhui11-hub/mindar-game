@@ -11,7 +11,6 @@
   <style>
     body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
     canvas, a-scene { touch-action: none; }
-
     #overlay{
       position:fixed; inset:0; z-index:10;
       display:flex; align-items:center; justify-content:center;
@@ -52,14 +51,13 @@
 
     <a-camera id="cam" position="0 0 0" look-controls="enabled:false"></a-camera>
 
-    <!-- Anchor of the image target -->
+    <!-- Image target anchor -->
     <a-entity id="anchor" mindar-image-target="targetIndex:0"></a-entity>
   </a-scene>
 
   <script>
-    const sceneEl = document.querySelector("a-scene");
-    const camEl   = document.getElementById("cam");
-    const anchorEl= document.getElementById("anchor");
+    const sceneEl  = document.querySelector("a-scene");
+    const anchorEl = document.getElementById("anchor");
 
     const overlay = document.getElementById("overlay");
     const titleEl = document.getElementById("title");
@@ -68,8 +66,7 @@
     let scannedOnce = false;
     let placed = false;
 
-    // A "placement plane" attached to the target.
-    // We'll raycast onto this plane to get a tap position.
+    // Invisible plane attached to target, used only for tap hit-testing
     let planeEl = null;
 
     function showOverlay(title, msg){
@@ -77,30 +74,28 @@
       msgEl.textContent = msg;
       overlay.style.display = "flex";
     }
-    function hideOverlay(){
-      overlay.style.display = "none";
-    }
+    function hideOverlay(){ overlay.style.display = "none"; }
 
-    // When target is detected the first time:
     anchorEl.addEventListener("targetFound", () => {
       if (!scannedOnce){
         scannedOnce = true;
 
-        // Create an invisible plane in front of the target for tapping
         planeEl = document.createElement("a-plane");
-        planeEl.setAttribute("id", "tapPlane");
         planeEl.setAttribute("width", "2.2");
         planeEl.setAttribute("height", "1.4");
-        planeEl.setAttribute("position", "0 0 0.0");
+        planeEl.setAttribute("position", "0 0 0");
         planeEl.setAttribute("rotation", "0 0 0");
         planeEl.setAttribute("material", "opacity: 0; transparent: true;");
         anchorEl.appendChild(planeEl);
 
         showOverlay("Tap to place", "Tap anywhere to place the model.");
+      } else {
+        // If they lost target earlier before placing, this helps.
+        if (!placed) showOverlay("Tap to place", "Tap anywhere to place the model.");
       }
     });
 
-    // Manual raycast (works on iPhone + Android)
+    // Manual raycast
     const raycaster = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
 
@@ -114,45 +109,61 @@
 
       raycaster.setFromCamera(ndc, sceneEl.camera);
 
-      // Intersect with the THREE object of the plane
-      const planeObj = planeEl.object3D;
-      const hits = raycaster.intersectObject(planeObj, true);
+      const hits = raycaster.intersectObject(planeEl.object3D, true);
       if (!hits.length) return null;
 
-      // Convert world point to anchor-local coordinates
+      // Convert hit point to anchor-local coordinates
       const worldPoint = hits[0].point.clone();
       const localPoint = anchorEl.object3D.worldToLocal(worldPoint);
-
       return localPoint; // THREE.Vector3 in anchor space
     }
 
-    function placeModelAt(localPoint){
-      // Create model as a child of anchor so it stays aligned with target coords
+    function placeModelInWorld(localPoint){
+      // Create a temp Object3D at the local point under anchor to get a world transform
+      const temp = new THREE.Object3D();
+      temp.position.copy(localPoint);
+      anchorEl.object3D.add(temp);
+      anchorEl.object3D.updateMatrixWorld(true);
+      temp.updateMatrixWorld(true);
+
+      const worldPos = new THREE.Vector3();
+      const worldQuat = new THREE.Quaternion();
+      const worldScale = new THREE.Vector3();
+      temp.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+
+      anchorEl.object3D.remove(temp);
+
+      // Now spawn model in SCENE ROOT using world position/rotation
       const modelEl = document.createElement("a-entity");
       modelEl.setAttribute("gltf-model", "#plasticModel");
 
-      // Smaller size (tweak this)
+      // smaller size (tune this)
       modelEl.setAttribute("scale", "0.15 0.15 0.15");
 
-      // Place at tapped point, slightly in front
-      modelEl.setAttribute("position", `${localPoint.x} ${localPoint.y} 0.05`);
+      modelEl.setAttribute("position", `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
 
-      // Optional rotation
-      modelEl.setAttribute("rotation", "0 0 0");
+      // convert quaternion to Euler for A-Frame rotation
+      const euler = new THREE.Euler().setFromQuaternion(worldQuat, "YXZ");
+      const deg = (r) => r * 180 / Math.PI;
+      modelEl.setAttribute("rotation", `${deg(euler.x)} ${deg(euler.y)} ${deg(euler.z)}`);
 
-      anchorEl.appendChild(modelEl);
+      sceneEl.appendChild(modelEl);
     }
 
     function onTap(clientX, clientY){
       if (!scannedOnce) return;
-      if (placed) return; // only place once; tell me if you want re-place
+      if (placed) return;
 
       const localPoint = raycastToPlane(clientX, clientY);
       if (!localPoint) return;
 
       placed = true;
       hideOverlay();
-      placeModelAt(localPoint);
+
+      // optional: remove plane after placement
+      if (planeEl && planeEl.parentElement) planeEl.parentElement.removeChild(planeEl);
+
+      placeModelInWorld(localPoint);
     }
 
     window.addEventListener("touchstart", (e) => {
@@ -165,11 +176,10 @@
       onTap(e.clientX, e.clientY);
     });
 
-    // If target is lost, we do nothing (model stays).
-    // But note: tracking quality affects stability.
+    // If target is lost before placing, tell them to bring it back
     anchorEl.addEventListener("targetLost", () => {
-      if (!placed && scannedOnce) {
-        showOverlay("Tap to place", "Bring the target back briefly, then tap to place.");
+      if (!placed && scannedOnce){
+        showOverlay("Target lost", "Bring the target back into view, then tap to place.");
       }
     });
   </script>
