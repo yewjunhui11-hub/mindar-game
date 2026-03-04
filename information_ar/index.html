@@ -1,83 +1,42 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-  <title>Information AR</title>
+<div id="infoPanel" style="
+position:fixed;
+inset:0;
+display:none;
+align-items:center;
+justify-content:center;
+background:rgba(0,0,0,0.65);
+z-index:20;
+font-family:system-ui;
+">
 
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <div style="
+  width:min(520px,92vw);
+  background:#111;
+  color:white;
+  border-radius:16px;
+  padding:20px;
+  border:1px solid rgba(255,255,255,0.15);
+  ">
 
-  <style>
-    body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
-    #hint{
-      position:fixed; inset:0; z-index:10;
-      display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.55); color:#fff; text-align:center;
-      padding:18px;
-    }
-    #hint .card{
-      width:min(520px, 92vw);
-      background:rgba(18,18,18,0.92);
-      border:1px solid rgba(255,255,255,0.14);
-      border-radius:16px;
-      padding:16px;
-    }
-    h2{ margin:0 0 8px 0; font-size:20px; }
-    p{ margin:0; opacity:.9; line-height:1.45; }
-    .small{ margin-top:10px; opacity:.7; font-size:12px; }
-  </style>
-</head>
+    <h2 id="panelTitle">Why Reduce Single-Use Plastic?</h2>
 
-<body>
-  <div id="hint">
-    <div class="card">
-      <h2>Scan the target image</h2>
-      <p>Point your camera at the image target to show the model.</p>
-      <div class="small">Tip: go nearer + brighter lighting.</div>
-    </div>
+    <ul id="panelText" style="line-height:1.6">
+      <li>Single-use plastics are often used for only a few minutes but can take <b>hundreds of years to break down</b>.</li>
+      <li>Plastic waste can end up in the ocean, where <b>marine animals may eat or become trapped in it</b>.</li>
+      <li>Producing and burning plastic releases <b>greenhouse gases that contribute to climate change</b>.</li>
+    </ul>
+
+    <button id="doneBtn" style="
+    margin-top:10px;
+    padding:10px 16px;
+    border-radius:10px;
+    border:none;
+    font-weight:700;
+    cursor:pointer;
+    ">
+    Done
+    </button>
+
   </div>
 
-  <a-scene
-    mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
-    vr-mode-ui="enabled:false"
-    device-orientation-permission-ui="enabled:true"
-    renderer="colorManagement: true; physicallyCorrectLights: true"
-  >
-    <a-assets>
-      <!-- must match file name exactly -->
-      <a-asset-item id="plasticModel" src="plastic_model.glb"></a-asset-item>
-    </a-assets>
-
-    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
-
-    <!-- Model is attached to targetIndex 0 -->
-    <a-entity id="anchor" mindar-image-target="targetIndex: 0">
-      <a-entity
-        id="model"
-        gltf-model="#plasticModel"
-        position="0 0 0.05"
-        rotation="0 0 0"
-        scale="0.12 0.12 0.12"
-        visible="false">
-      </a-entity>
-    </a-entity>
-  </a-scene>
-
-  <script>
-    const hint = document.getElementById("hint");
-    const anchor = document.getElementById("anchor");
-    const model = document.getElementById("model");
-
-    anchor.addEventListener("targetFound", () => {
-      model.setAttribute("visible", true);
-      hint.style.display = "none";
-    });
-
-    anchor.addEventListener("targetLost", () => {
-      model.setAttribute("visible", false);
-      hint.style.display = "flex";
-    });
-  </script>
-</body>
-</html>
+</div>
