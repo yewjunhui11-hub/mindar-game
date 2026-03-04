@@ -5,28 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
   <title>Information AR</title>
 
-  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-
-  <!-- MindAR (Image Tracking) -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
-
     #hint{
-      position:fixed;
-      inset:0;
-      z-index:10;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:rgba(0,0,0,.55);
-      color:#fff;
-      text-align:center;
+      position:fixed; inset:0; z-index:10;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.55); color:#fff; text-align:center;
       padding:18px;
     }
-
     #hint .card{
       width:min(520px, 92vw);
       background:rgba(18,18,18,0.92);
@@ -34,7 +23,6 @@
       border-radius:16px;
       padding:16px;
     }
-
     h2{ margin:0 0 8px 0; font-size:20px; }
     p{ margin:0; opacity:.9; line-height:1.45; }
     .small{ margin-top:10px; opacity:.7; font-size:12px; }
@@ -42,8 +30,6 @@
 </head>
 
 <body>
-
-  <!-- Scan instruction overlay -->
   <div id="hint">
     <div class="card">
       <h2>Scan the target image</h2>
@@ -53,26 +39,20 @@
   </div>
 
   <a-scene
-    mindar-image="imageTargetSrc: targets.mind; autoStart: true; uiScanning: true; uiLoading: true;"
+    mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
     vr-mode-ui="enabled:false"
     device-orientation-permission-ui="enabled:true"
-    renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true"
-    embedded
+    renderer="colorManagement: true; physicallyCorrectLights: true"
   >
     <a-assets>
       <!-- must match file name exactly -->
       <a-asset-item id="plasticModel" src="plastic_model.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Camera -->
     <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-    <!-- Better lighting -->
-    <a-entity light="type: ambient; intensity: 1.2"></a-entity>
-    <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
-
-    <!-- Anchor on image target 0 -->
-    <a-entity id="anchor" mindar-image-target="targetIndex: 0" smoothing="true">
+    <!-- Model is attached to targetIndex 0 -->
+    <a-entity id="anchor" mindar-image-target="targetIndex: 0">
       <a-entity
         id="model"
         gltf-model="#plasticModel"
@@ -82,7 +62,6 @@
         visible="false">
       </a-entity>
     </a-entity>
-
   </a-scene>
 
   <script>
@@ -90,23 +69,15 @@
     const anchor = document.getElementById("anchor");
     const model = document.getElementById("model");
 
-    // Once detected, keep model visible to prevent flicker
-    let detectedOnce = false;
-
     anchor.addEventListener("targetFound", () => {
-      detectedOnce = true;
       model.setAttribute("visible", true);
       hint.style.display = "none";
     });
 
     anchor.addEventListener("targetLost", () => {
-      // Don't hide the model anymore (this removes the unstable flicker feeling)
-      // Only show hint again if it has never been detected before
-      if (!detectedOnce) {
-        hint.style.display = "flex";
-      }
+      model.setAttribute("visible", false);
+      hint.style.display = "flex";
     });
   </script>
-
 </body>
 </html>
