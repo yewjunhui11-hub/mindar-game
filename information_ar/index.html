@@ -1,50 +1,83 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Information AR</title>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
+  <title>Information AR</title>
 
-    <!-- A-Frame -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-    <!-- MindAR for A-Frame -->
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
+    #hint{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.55); color:#fff; z-index:10; text-align:center;
+      padding:18px;
+    }
+    #hint .card{
+      width:min(520px, 92vw);
+      background:rgba(18,18,18,0.92);
+      border:1px solid rgba(255,255,255,0.14);
+      border-radius:16px;
+      padding:16px;
+    }
+    h2{ margin:0 0 8px 0; font-size:20px; }
+    p{ margin:0; opacity:.9; line-height:1.45; }
+    .small{ margin-top:10px; opacity:.7; font-size:12px; }
+  </style>
+</head>
 
-    <style>
-      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-    </style>
-  </head>
+<body>
+  <div id="hint">
+    <div class="card">
+      <h2>Scan the target image</h2>
+      <p>Point your camera at the target image to see the plastic model.</p>
+      <div class="small">Tip: Ensure good lighting & don’t be too far away.</div>
+    </div>
+  </div>
 
-  <body>
-    <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: true; uiLoading: true;"
-      color-space="sRGB"
-      renderer="colorManagement: true; physicallyCorrectLights: true;"
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: true"
-    >
-      <a-assets>
-        <!-- If you renamed to plastic_model.glb, change the src to ./plastic_model.glb -->
-        <a-asset-item id="plasticModel" src="./plastic%20model.glb"></a-asset-item>
-      </a-assets>
+  <a-scene
+    mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: true"
+    renderer="colorManagement: true; physicallyCorrectLights: true"
+  >
+    <a-assets>
+      <!-- make sure this filename matches exactly -->
+      <a-asset-item id="plasticModel" src="plastic_model.glb"></a-asset-item>
+    </a-assets>
 
-      <!-- Camera -->
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Target 0 = first image inside targets.mind -->
-      <a-entity mindar-image-target="targetIndex: 0">
-        <a-gltf-model
-          src="#plasticModel"
-          position="0 0 0"
-          rotation="0 0 0"
-          scale="0.3 0.3 0.3"
-        ></a-gltf-model>
+    <!-- targetIndex 0 = first image inside targets.mind -->
+    <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+      <!-- Start hidden; show only when targetFound -->
+      <a-entity
+        id="model"
+        gltf-model="#plasticModel"
+        position="0 0 0.05"
+        rotation="0 0 0"
+        scale="1 1 1"
+        visible="false">
       </a-entity>
+    </a-entity>
+  </a-scene>
 
-      <!-- Light (helps model look nicer) -->
-      <a-entity light="type: ambient; intensity: 1"></a-entity>
-      <a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>
-    </a-scene>
-  </body>
+  <script>
+    const anchor = document.getElementById("anchor");
+    const model = document.getElementById("model");
+    const hint = document.getElementById("hint");
+
+    anchor.addEventListener("targetFound", () => {
+      model.setAttribute("visible", true);
+      hint.style.display = "none";
+    });
+
+    anchor.addEventListener("targetLost", () => {
+      model.setAttribute("visible", false);
+      hint.style.display = "flex";
+    });
+  </script>
+</body>
 </html>
