@@ -3,21 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-  <title>Information AR - Tap to Place</title>
+  <title>Information AR</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     body { margin:0; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Arial; }
-    canvas, a-scene { touch-action: none; }
-    #overlay{
+    #hint{
       position:fixed; inset:0; z-index:10;
       display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.60); color:#fff; text-align:center;
+      background:rgba(0,0,0,.55); color:#fff; text-align:center;
       padding:18px;
     }
-    #card{
+    #hint .card{
       width:min(520px, 92vw);
       background:rgba(18,18,18,0.92);
       border:1px solid rgba(255,255,255,0.14);
@@ -31,11 +30,11 @@
 </head>
 
 <body>
-  <div id="overlay">
-    <div id="card">
-      <h2 id="title">Scan the target image</h2>
-      <p id="msg">Point your camera at the target to begin.</p>
-      <div class="small">Tip: good lighting helps.</div>
+  <div id="hint">
+    <div class="card">
+      <h2>Scan the target image</h2>
+      <p>Point your camera at the image target to show the model.</p>
+      <div class="small">Tip: go nearer + brighter lighting.</div>
     </div>
   </div>
 
@@ -46,141 +45,38 @@
     renderer="colorManagement: true; physicallyCorrectLights: true"
   >
     <a-assets>
+      <!-- must match file name exactly -->
       <a-asset-item id="plasticModel" src="plastic_model.glb"></a-asset-item>
     </a-assets>
 
-    <a-camera id="cam" position="0 0 0" look-controls="enabled:false"></a-camera>
+    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-    <!-- Image target anchor -->
-    <a-entity id="anchor" mindar-image-target="targetIndex:0"></a-entity>
+    <!-- Model is attached to targetIndex 0 -->
+    <a-entity id="anchor" mindar-image-target="targetIndex: 0">
+      <a-entity
+        id="model"
+        gltf-model="#plasticModel"
+        position="0 0 0.05"
+        rotation="0 0 0"
+        scale="0.12 0.12 0.12"
+        visible="false">
+      </a-entity>
+    </a-entity>
   </a-scene>
 
   <script>
-    const sceneEl  = document.querySelector("a-scene");
-    const anchorEl = document.getElementById("anchor");
+    const hint = document.getElementById("hint");
+    const anchor = document.getElementById("anchor");
+    const model = document.getElementById("model");
 
-    const overlay = document.getElementById("overlay");
-    const titleEl = document.getElementById("title");
-    const msgEl   = document.getElementById("msg");
-
-    let scannedOnce = false;
-    let placed = false;
-
-    // Invisible plane attached to target, used only for tap hit-testing
-    let planeEl = null;
-
-    function showOverlay(title, msg){
-      titleEl.textContent = title;
-      msgEl.textContent = msg;
-      overlay.style.display = "flex";
-    }
-    function hideOverlay(){ overlay.style.display = "none"; }
-
-    anchorEl.addEventListener("targetFound", () => {
-      if (!scannedOnce){
-        scannedOnce = true;
-
-        planeEl = document.createElement("a-plane");
-	planeEl.setAttribute("width", "0.9");
-	planeEl.setAttribute("height", "0.55");
-        planeEl.setAttribute("position", "0 0 0");
-        planeEl.setAttribute("rotation", "0 0 0");
-        planeEl.setAttribute("material", "opacity: 0; transparent: true; color: #00ffcc;");
-        anchorEl.appendChild(planeEl);
-
-        showOverlay("Tap to place", "Tap anywhere to place the model.");
-      } else {
-        // If they lost target earlier before placing, this helps.
-        if (!placed) showOverlay("Tap to place", "Tap anywhere to place the model.");
-      }
+    anchor.addEventListener("targetFound", () => {
+      model.setAttribute("visible", true);
+      hint.style.display = "none";
     });
 
-    // Manual raycast
-    const raycaster = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-
-    function raycastToPlane(clientX, clientY){
-      if (!sceneEl.canvas || !sceneEl.camera) return null;
-      if (!planeEl) return null;
-
-      const rect = sceneEl.canvas.getBoundingClientRect();
-      ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      ndc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
-
-      raycaster.setFromCamera(ndc, sceneEl.camera);
-
-      const hits = raycaster.intersectObject(planeEl.object3D, true);
-      if (!hits.length) return null;
-
-      // Convert hit point to anchor-local coordinates
-      const worldPoint = hits[0].point.clone();
-      const localPoint = anchorEl.object3D.worldToLocal(worldPoint);
-      return localPoint; // THREE.Vector3 in anchor space
-    }
-
-    function placeModelInWorld(localPoint){
-      // Create a temp Object3D at the local point under anchor to get a world transform
-      const temp = new THREE.Object3D();
-      temp.position.copy(localPoint);
-      anchorEl.object3D.add(temp);
-      anchorEl.object3D.updateMatrixWorld(true);
-      temp.updateMatrixWorld(true);
-
-      const worldPos = new THREE.Vector3();
-      const worldQuat = new THREE.Quaternion();
-      const worldScale = new THREE.Vector3();
-      temp.matrixWorld.decompose(worldPos, worldQuat, worldScale);
-
-      anchorEl.object3D.remove(temp);
-
-      // Now spawn model in SCENE ROOT using world position/rotation
-      const modelEl = document.createElement("a-entity");
-      modelEl.setAttribute("gltf-model", "#plasticModel");
-
-      // smaller size (tune this)
-      modelEl.setAttribute("scale", "0.15 0.15 0.15");
-
-      modelEl.setAttribute("position", `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
-
-      // convert quaternion to Euler for A-Frame rotation
-      const euler = new THREE.Euler().setFromQuaternion(worldQuat, "YXZ");
-      const deg = (r) => r * 180 / Math.PI;
-      modelEl.setAttribute("rotation", `${deg(euler.x)} ${deg(euler.y)} ${deg(euler.z)}`);
-
-      sceneEl.appendChild(modelEl);
-    }
-
-    function onTap(clientX, clientY){
-      if (!scannedOnce) return;
-      if (placed) return;
-
-      const localPoint = raycastToPlane(clientX, clientY);
-      if (!localPoint) return;
-
-      placed = true;
-      hideOverlay();
-
-      // optional: remove plane after placement
-      if (planeEl && planeEl.parentElement) planeEl.parentElement.removeChild(planeEl);
-
-      placeModelInWorld(localPoint);
-    }
-
-    window.addEventListener("touchstart", (e) => {
-      if (!e.touches || !e.touches.length) return;
-      const t = e.touches[0];
-      onTap(t.clientX, t.clientY);
-    }, { passive:true });
-
-    window.addEventListener("mousedown", (e) => {
-      onTap(e.clientX, e.clientY);
-    });
-
-    // If target is lost before placing, tell them to bring it back
-    anchorEl.addEventListener("targetLost", () => {
-      if (!placed && scannedOnce){
-        showOverlay("Target lost", "Bring the target back into view, then tap to place.");
-      }
+    anchor.addEventListener("targetLost", () => {
+      model.setAttribute("visible", false);
+      hint.style.display = "flex";
     });
   </script>
 </body>
