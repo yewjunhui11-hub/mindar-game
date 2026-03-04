@@ -1,42 +1,269 @@
-<div id="infoPanel" style="
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
+
+<title>Plastic Awareness AR</title>
+
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+<style>
+
+body{
+margin:0;
+overflow:hidden;
+font-family:system-ui,-apple-system,Segoe UI,Arial;
+}
+
+/* scan instruction */
+#hint{
+position:fixed;
+inset:0;
+display:flex;
+align-items:center;
+justify-content:center;
+background:rgba(0,0,0,0.55);
+color:white;
+z-index:10;
+text-align:center;
+padding:20px;
+}
+
+.card{
+background:#111;
+padding:18px;
+border-radius:16px;
+width:min(520px,92vw);
+border:1px solid rgba(255,255,255,0.2);
+}
+
+/* info popup */
+#infoPanel{
 position:fixed;
 inset:0;
 display:none;
 align-items:center;
 justify-content:center;
-background:rgba(0,0,0,0.65);
+background:rgba(0,0,0,0.7);
 z-index:20;
-font-family:system-ui;
-">
+}
 
-  <div style="
-  width:min(520px,92vw);
-  background:#111;
-  color:white;
-  border-radius:16px;
-  padding:20px;
-  border:1px solid rgba(255,255,255,0.15);
-  ">
+.panelCard{
+background:#111;
+color:white;
+padding:22px;
+border-radius:16px;
+width:min(520px,92vw);
+border:1px solid rgba(255,255,255,0.2);
+}
 
-    <h2 id="panelTitle">Why Reduce Single-Use Plastic?</h2>
+.panelCard h2{
+margin-top:0;
+}
 
-    <ul id="panelText" style="line-height:1.6">
-      <li>Single-use plastics are often used for only a few minutes but can take <b>hundreds of years to break down</b>.</li>
-      <li>Plastic waste can end up in the ocean, where <b>marine animals may eat or become trapped in it</b>.</li>
-      <li>Producing and burning plastic releases <b>greenhouse gases that contribute to climate change</b>.</li>
-    </ul>
+.panelCard ul{
+line-height:1.6;
+padding-left:20px;
+}
 
-    <button id="doneBtn" style="
-    margin-top:10px;
-    padding:10px 16px;
-    border-radius:10px;
-    border:none;
-    font-weight:700;
-    cursor:pointer;
-    ">
-    Done
-    </button>
+button{
+margin-top:14px;
+padding:10px 18px;
+border-radius:10px;
+border:none;
+font-weight:700;
+cursor:pointer;
+}
 
-  </div>
+</style>
+</head>
+
+
+<body>
+
+<!-- scan instruction -->
+<div id="hint">
+<div class="card">
+<h2>Scan the image</h2>
+<p>Point your camera at the target image to reveal the model.</p>
+</div>
+</div>
+
+
+<!-- explanation panel -->
+<div id="infoPanel">
+
+<div class="panelCard">
+
+<h2 id="panelTitle">Why Reduce Single-Use Plastic?</h2>
+
+<ul id="panelText">
+
+<li>Single-use plastics are used for only a few minutes but can take <b>hundreds of years to decompose</b>.</li>
+
+<li>Plastic waste often ends up in oceans, where <b>marine animals may eat it or become trapped</b>.</li>
+
+<li>Producing and burning plastic releases <b>greenhouse gases that contribute to climate change</b>.</li>
+
+</ul>
+
+<button id="doneBtn">Done</button>
 
 </div>
+
+</div>
+
+
+
+<a-scene
+mindar-image="imageTargetSrc: targets.mind; autoStart: true;"
+vr-mode-ui="enabled:false"
+device-orientation-permission-ui="enabled:true"
+renderer="colorManagement:true; physicallyCorrectLights:true"
+>
+
+
+<a-assets>
+
+<a-asset-item id="plasticModel" src="plastic_model.glb"></a-asset-item>
+
+</a-assets>
+
+
+<a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+
+
+<a-entity id="anchor" mindar-image-target="targetIndex:0">
+
+<a-entity
+id="model"
+gltf-model="#plasticModel"
+position="0 0 0.05"
+rotation="0 0 0"
+scale="0.08 0.08 0.08"
+visible="false"
+class="clickable">
+</a-entity>
+
+</a-entity>
+
+</a-scene>
+
+
+
+<script>
+
+const hint=document.getElementById("hint");
+const anchor=document.getElementById("anchor");
+const model=document.getElementById("model");
+
+const infoPanel=document.getElementById("infoPanel");
+const doneBtn=document.getElementById("doneBtn");
+const panelTitle=document.getElementById("panelTitle");
+const panelText=document.getElementById("panelText");
+
+let explained=false;
+
+
+/* show model when target detected */
+
+anchor.addEventListener("targetFound",()=>{
+
+model.setAttribute("visible",true);
+
+hint.style.display="none";
+
+});
+
+
+anchor.addEventListener("targetLost",()=>{
+
+model.setAttribute("visible",false);
+
+hint.style.display="flex";
+
+});
+
+
+/* raycast tapping */
+
+const scene=document.querySelector("a-scene");
+const raycaster=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+
+
+function tap(x,y){
+
+if(!scene.canvas)return;
+
+const rect=scene.canvas.getBoundingClientRect();
+
+mouse.x=((x-rect.left)/rect.width)*2-1;
+mouse.y=-((y-rect.top)/rect.height)*2+1;
+
+raycaster.setFromCamera(mouse,scene.camera);
+
+const mesh=model.getObject3D("mesh");
+
+if(!mesh)return;
+
+const intersects=raycaster.intersectObject(mesh,true);
+
+if(intersects.length>0){
+
+if(!explained){
+
+infoPanel.style.display="flex";
+
+}
+
+}
+
+}
+
+
+window.addEventListener("touchstart",e=>{
+
+const t=e.touches[0];
+
+tap(t.clientX,t.clientY);
+
+},{passive:true});
+
+
+window.addEventListener("mousedown",e=>{
+
+tap(e.clientX,e.clientY);
+
+});
+
+
+/* Done button */
+
+doneBtn.addEventListener("click",()=>{
+
+if(!explained){
+
+panelTitle.innerText="Congrats 🎉";
+
+panelText.innerHTML="<p>You earned <b>2 points</b> for learning about reducing single-use plastic!</p>";
+
+doneBtn.innerText="Close";
+
+explained=true;
+
+}else{
+
+infoPanel.style.display="none";
+
+}
+
+});
+
+
+</script>
+
+</body>
+</html>
