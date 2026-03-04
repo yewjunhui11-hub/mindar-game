@@ -53,7 +53,7 @@
   </div>
 
   <a-scene
-    mindar-image="imageTargetSrc: targets.mind; autoStart: true; uiScanning: true; uiLoading: true;"
+    mindar-image="imageTargetSrc: targets.mind; autoStart: true; uiScanning: true; uiLoading: true; filterMinCF: 0.0001; filterBeta: 0.001;"
     vr-mode-ui="enabled:false"
     device-orientation-permission-ui="enabled:true"
     renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true"
@@ -73,19 +73,14 @@
 
     <!-- Anchor on image target 0 -->
     <a-entity id="anchor" mindar-image-target="targetIndex: 0" smoothing="true">
-
-      <!-- Wrapper to adjust orientation (edit this rotation if needed) -->
-      <a-entity id="modelRoot" rotation="0 180 0">
-        <a-entity
-          id="model"
-          gltf-model="#plasticModel"
-          position="0 0 0.05"
-          rotation="0 0 0"
-          scale="0.12 0.12 0.12"
-          visible="false">
-        </a-entity>
+      <a-entity
+        id="model"
+        gltf-model="#plasticModel"
+        position="0 0 0.05"
+        rotation="0 0 0"
+        scale="0.12 0.12 0.12"
+        visible="false">
       </a-entity>
-
     </a-entity>
 
   </a-scene>
@@ -95,32 +90,21 @@
     const anchor = document.getElementById("anchor");
     const model = document.getElementById("model");
 
+    // Once detected, keep model visible to prevent flicker
     let detectedOnce = false;
-    let lostTimer = null;
 
     anchor.addEventListener("targetFound", () => {
       detectedOnce = true;
       model.setAttribute("visible", true);
       hint.style.display = "none";
-
-      // cancel any pending "lost" action
-      if (lostTimer) {
-        clearTimeout(lostTimer);
-        lostTimer = null;
-      }
     });
 
     anchor.addEventListener("targetLost", () => {
-      // Delay the "lost" reaction to reduce flicker
-      if (lostTimer) clearTimeout(lostTimer);
-
-      lostTimer = setTimeout(() => {
-        // If you want it to NEVER disappear, keep this line commented:
-        // model.setAttribute("visible", false);
-
-        // If it was never detected before, show the hint again
-        if (!detectedOnce) hint.style.display = "flex";
-      }, 700); // tweak between 400–1000ms
+      // Don't hide the model anymore (this removes the unstable flicker feeling)
+      // Only show hint again if it has never been detected before
+      if (!detectedOnce) {
+        hint.style.display = "flex";
+      }
     });
   </script>
 
