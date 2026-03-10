@@ -139,10 +139,17 @@
     const SCALE_BY_ID = {
       "#c1": "0.05 0.05 0.05", // Metal bottle model
       "#c2": "0.05 0.05 0.05", // Container model
-      "#c3": "0.13 0.13 0.13",// Tote bag
+      "#c3": "0.13 0.13 0.13", // Tote bag
       "#w1": "0.03 0.03 0.03", // Plastic cup
       "#w2": "1.20 1.20 1.20", // Plastic fork
       "#w3": "2.80 2.80 2.80", // Plastic straw
+    };
+
+    // ---------------- NEW: per-model rotation ----------------
+    // Add any model here if you want a fixed rotation when it spawns.
+    // Example below: c3 will always rotate to 0 0 90.
+    const ROTATION_BY_ID = {
+      "#w2": "0 0 90"
     };
 
     const MODEL_POOL = [
@@ -271,7 +278,15 @@
 
       const pos = findNonOverlappingPosition();
       el.setAttribute("position", `${pos.x} ${pos.y} ${Z}`);
-      el.setAttribute("rotation", `0 ${rand(0,360)} 0`);
+
+      // ---------------- CHANGED: rotation logic ----------------
+      // If this model has a fixed rotation in ROTATION_BY_ID, use it.
+      // Otherwise keep the original random Y rotation.
+      if (ROTATION_BY_ID[choice.id]) {
+        el.setAttribute("rotation", ROTATION_BY_ID[choice.id]);
+      } else {
+        el.setAttribute("rotation", `0 ${rand(0,360)} 0`);
+      }
 
       anchorEl.appendChild(el);
 
@@ -427,7 +442,7 @@
 
       const rect = sceneEl.canvas.getBoundingClientRect();
       ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      ndc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+      ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
       raycaster.setFromCamera(ndc, sceneEl.camera);
 
