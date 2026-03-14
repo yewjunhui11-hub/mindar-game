@@ -68,7 +68,7 @@
       <h2>Stop Single-Use Plastic!!</h2>
       <p id="scanStatus" class="small">Scan the target image to begin…</p>
       <ul>
-        <li>You have <b>30 seconds</b>.</li>
+        <li>You have <b>20 seconds</b>.</li>
         <li>Tap <b>reusable</b> items to get <b>+1</b>.</li>
         <li>Careful not to tap on <b>single-use plastic</b> items or, <b>−1</b>.</li>
         <li>Good Luck!</li>
@@ -86,7 +86,7 @@
   <!-- End Overlay -->
   <div id="endOverlay" class="overlay" style="display:none;">
     <div class="card">
-      <h2>Congrats 🎉</h2>
+      <h2 id="endTitle">Congrats 🎉</h2>
       <p>Your points awarded: <b><span id="finalScore">0</span></b></p>
       <div class="row">
         <span class="small">Play again?</span>
@@ -174,6 +174,7 @@
     const scoreEl = document.getElementById("score");
     const timeEl = document.getElementById("time");
     const finalScoreEl = document.getElementById("finalScore");
+    const endTitleEl = document.getElementById("endTitle");
 
     let scannedOnce = false;
     let running = false;
@@ -391,6 +392,7 @@
 
       clearModels();
       finalScoreEl.textContent = score;
+      endTitleEl.textContent = score <= 0 ? "Try again next time!" : "Congrats 🎉";
       endOverlay.style.display = "flex";
     }
 
